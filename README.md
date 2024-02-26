@@ -39,11 +39,3 @@ world = World(
 - `Body`: Representa um corpo celeste. Você pode personalizar a massa (`m`), posição inicial (`s`), velocidade inicial (`v`), aceleração (`a`), e cor (`color`).
 
 - `World`: Representa o ambiente da simulação. Personalize a resolução da tela (`resolution`), a lista de corpos (`bodies`), escala do mundo (`world_scale`), e a taxa de quadros por segundo (`framerate`).
-
-## Contribuições
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir problemas ou enviar solicitações de pull.
-
-## Licença
-
-Este projeto está licenciado sob a [Licença MIT](LICENSE).
