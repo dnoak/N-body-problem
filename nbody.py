@@ -88,7 +88,7 @@ class World:
     time_scale: int = 60
     
     def __post_init__(self):
-        self.screen = 255 * np.ones((*self.resolution[::-1], 3), dtype=np.uint8)
+        self.screen = 255 * np.ones((*self.resolution[::-1], 3), dtype=np.uint16)
         for body in self.bodies:
             body.set_path_size(self.bodies_path_size)
 
@@ -105,7 +105,7 @@ class World:
     def show(self):
         cv2.namedWindow('image', cv2.WINDOW_NORMAL)
         cv2.setMouseCallback('image', self.mouse_callback)
-        cv2.imshow('image', self.screen)
+        cv2.imshow('image', self.screen.astype(np.uint8))
         cv2.waitKey(33)
     
     def render(self):
@@ -116,7 +116,13 @@ class World:
             cv2.putText(self.screen, body.name, (x-10, y+6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
             for x, y in body.path_history[1:]:
-                cv2.circle(self.screen, (int(x), int(y)), 1, body.color, -1)  
+                cv2.circle(self.screen, (int(x), int(y)), 1, body.color, -1)
+            
+            # self.screen += 1
+            # self.screen = np.clip(self.screen, 0, 255)
+
+            
+
         self.show()
 
     def update(self):
