@@ -110,8 +110,8 @@ class World:
                 lambda body: not (x-10 < body.s[0] < x+10 and y-10 < body.s[1] < y+10), 
                 self.bodies))
 
-        # middle click remove all
         if event == cv2.EVENT_MBUTTONUP:
+            #with threading.Lock():
             self.bodies = []
 
     def show(self):
@@ -123,9 +123,15 @@ class World:
     def render(self):
         self.screen.fill(255)
         for body in self.bodies:
+            diff_to_255 = ( np.array([255, 255, 255]) - body.color )
+            alpha_colors = np.tile(np.arange(
+                0, 1, 1/self.bodies_path_size), (3, 1)
+            ).T ** 1.5 * diff_to_255 + body.color
+        
             for alpha, (x, y) in enumerate(body.path_history[1:]):
-                #body_color = np.clip(body.color + alpha/2, 0, 255)
-                cv2.circle(self.screen, (int(x), int(y)), 1, body.color.tolist(), -1)
+                #body_color = body.color + color_alpha * alpha
+                cv2.circle(self.screen, (int(x), int(y)), 1, alpha_colors[alpha], -1)
+                # cv2.circle(self.screen, (int(x), int(y)), 1, body_color.tolist(), -1)
             
             x, y = int(body.s[0]), int(body.s[1])
             cv2.circle(self.screen, (x, y), 12, body.color.tolist(), -1)
@@ -168,7 +174,7 @@ world = World(
         # Body(name='2', m=10e15, s=np.array([700, 400]), v=np.array([0, 450]), color=(255, 0, 255)),
         # Body(name='3', m=10e15, s=np.array([900, 400]), v=np.array([0, -450]), color=(255, 0, 255)),
     ],
-    bodies_path_size=1000,
+    bodies_path_size=700,
     time_scale=1/60,
 ).start()
 
