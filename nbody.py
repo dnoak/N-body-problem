@@ -1,3 +1,4 @@
+import threading
 import numpy as np
 import cv2
 from dataclasses import dataclass, field
@@ -15,7 +16,7 @@ class Body:
     a: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=np.float32))
 
     path_history: np.ndarray = None
-    color: tuple = field(default_factory=lambda: tuple(random.choices(range(256), k=3)))
+    color: np.ndarray = field(default_factory=lambda: np.random.randint(0, 255, 3))
 
     def __repr__(self):
         s = f"({int(self.s[0])}, {int(self.s[1])})"
@@ -62,18 +63,12 @@ class Body:
         dx = body.s[0] - self.s[0]
         dy = body.s[1] - self.s[1]
         distance = np.sqrt(dx**2 + dy**2)
-        if distance < 20:
-            distance = 20
         direction = np.sign([dx, dy])
         self.a = ( body.m * G * 1 / distance ** 2 ) * direction
-        self.v = self.v + self.a * t
+        self.v = self.v + self.a * t if distance > 20 else np.zeros(2)
         self.s = self.s + self.v * t
     
-    def update(self, body, t, jit):
-        if not jit:
-            self.update_position(body, t)
-            self.update_history()
-            return 
+    def update(self, body, t):
         self.s, self.v, self.a = self.update_position_jit(
             self.a, self.v, self.s, 
             body.s, body.m, t)
@@ -92,15 +87,32 @@ class World:
         for body in self.bodies:
             body.set_path_size(self.bodies_path_size)
 
+    def get_bodie_name(self):
+        names = [-1]
+        for name in [body.name for body in self.bodies]:
+            if name.isdigit(): names.append(int(name))
+        return max(names) + 1
+
     def mouse_callback(self, event, x, y, flags, params):
         if event == cv2.EVENT_LBUTTONUP:
+            #with threading.Lock():
             self.bodies.append(
                 Body(
-                    name=str(len(self.bodies)+1),
-                    m=10e14,
+                    name=str(self.get_bodie_name()),
+                    m=np.random.randint(1e14, 1e16, dtype=np.uint64),
                     s=np.array([x, y]),
                 ).set_path_size(self.bodies_path_size)
             )
+        
+        if event == cv2.EVENT_RBUTTONUP:
+            #with threading.Lock():
+            self.bodies = list(filter(
+                lambda body: not (x-10 < body.s[0] < x+10 and y-10 < body.s[1] < y+10), 
+                self.bodies))
+
+        # middle click remove all
+        if event == cv2.EVENT_MBUTTONUP:
+            self.bodies = []
 
     def show(self):
         cv2.namedWindow('image', cv2.WINDOW_NORMAL)
@@ -111,26 +123,33 @@ class World:
     def render(self):
         self.screen.fill(255)
         for body in self.bodies:
+            for alpha, (x, y) in enumerate(body.path_history[1:]):
+                #body_color = np.clip(body.color + alpha/2, 0, 255)
+                cv2.circle(self.screen, (int(x), int(y)), 1, body.color.tolist(), -1)
+            
             x, y = int(body.s[0]), int(body.s[1])
-            cv2.circle(self.screen, (x, y), 12, body.color, -1)
+            cv2.circle(self.screen, (x, y), 12, body.color.tolist(), -1)
             cv2.putText(self.screen, body.name, (x-10, y+6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-
-            for x, y in body.path_history[1:]:
-                cv2.circle(self.screen, (int(x), int(y)), 1, body.color, -1)
-            
-            # self.screen += 1
-            # self.screen = np.clip(self.screen, 0, 255)
-
-            
 
         self.show()
 
+    def is_inside(self, body):
+        x_condition = 0 <= body.path_history[-1][0] <= self.resolution[0]
+        y_condition = 0 <= body.path_history[-1][1] <= self.resolution[1]
+        return x_condition and y_condition
+
     def update(self):
         t = self.time_scale
+        #with threading.Lock():
         for body in self.bodies:
             for another_bodie in self.bodies:
                 if another_bodie != body:
-                    body.update(another_bodie, t, jit=True)
+                    body.update(another_bodie, t)
+        self.bodies = list(filter(
+            lambda body: self.is_inside(body), 
+            self.bodies))
+        #print(f'Body count: {len(self.bodies)}')
+       
 
     def start(self):
         while True:
@@ -144,12 +163,12 @@ world = World(
         # Body(name='2', m=10e15, s=np.array([700, 300]), color=(255, 0, 100)),
         # Body(name='3', m=10e15, s=np.array([1200, 600]), color=(0, 255, 100)),
         *[Body(name=f'{name}', m=10e14) for name in range(1, 20)],
-        Body(name='0', m=10e15, s=np.array([800, 400]), color=(0, 255, 255)),
+        Body(name='0', m=10e15, s=np.array([800, 400])),
         # Body(name='1', m=30e15, s=np.array([800, 400]), color=(0, 255, 255)),
         # Body(name='2', m=10e15, s=np.array([700, 400]), v=np.array([0, 450]), color=(255, 0, 255)),
         # Body(name='3', m=10e15, s=np.array([900, 400]), v=np.array([0, -450]), color=(255, 0, 255)),
     ],
-    bodies_path_size=500,
+    bodies_path_size=1000,
     time_scale=1/60,
 ).start()
 
