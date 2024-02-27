@@ -2,7 +2,6 @@ import threading
 import numpy as np
 import cv2
 from dataclasses import dataclass, field
-import random
 import numba
 
 G = 6.6743e-11
@@ -24,7 +23,7 @@ class Body:
         a = f"{self.a[0]:.1f}, {self.a[1]:.1f}"
         return f"{self.name} - s: {s} v: {v} a: {a}"
     
-    def set_path_size(self, path_size):
+    def create_path_array(self, path_size):
         self.path_history = np.zeros((path_size, 2), dtype=np.float32)
         self.path_history[0] = self.s
         return self
@@ -65,7 +64,7 @@ class Body:
         distance = np.sqrt(dx**2 + dy**2)
         direction = np.sign([dx, dy])
         self.a = ( body.m * G * 1 / distance ** 2 ) * direction
-        self.v = self.v + self.a * t if distance > 20 else np.zeros(2)
+        self.v = self.v + self.a * t # if distance > 20 else np.zeros(2)
         self.s = self.s + self.v * t
     
     def update(self, body, t):
@@ -85,7 +84,7 @@ class World:
     def __post_init__(self):
         self.screen = 255 * np.ones((*self.resolution[::-1], 3), dtype=np.uint16)
         for body in self.bodies:
-            body.set_path_size(self.bodies_path_size)
+            body.create_path_array(self.bodies_path_size)
 
     def get_bodie_name(self):
         names = [-1]
@@ -101,7 +100,7 @@ class World:
                     name=str(self.get_bodie_name()),
                     m=np.random.randint(1e14, 1e16, dtype=np.uint64),
                     s=np.array([x, y]),
-                ).set_path_size(self.bodies_path_size)
+                ).create_path_array(self.bodies_path_size)
             )
         
         if event == cv2.EVENT_RBUTTONUP:
