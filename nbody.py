@@ -41,8 +41,8 @@ class Body:
     def update_position_jit(a, v, s, body_s, body_m, t):
         dxdy = (body_s - s)
         squared_distance = np.sum(dxdy**2)
-        if squared_distance < 1000: # 30²
-            squared_distance = 1000
+        if squared_distance < 900: # 30²
+            squared_distance = 900
         direction = np.sign(dxdy)
         
         a = ( body_m * G / squared_distance ) * direction
@@ -69,7 +69,7 @@ class World:
         for body in self.bodies:
             body.create_path_array(self.bodies_path_size)
 
-    def get_bodie_name(self):
+    def set_body_name(self):
         names = [-1]
         for name in [body.name for body in self.bodies]:
             if name.isdigit(): names.append(int(name))
@@ -77,12 +77,16 @@ class World:
 
     def mouse_callback(self, event, x, y, flags, params):
         #with threading.Lock():
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.mouse_event_xy = (x, y)
+
         if event == cv2.EVENT_LBUTTONUP:
             self.bodies.append(
                 Body(
-                    name=str(self.get_bodie_name()),
-                    m=np.random.randint(10e11, 10e16, dtype=np.uint64),
-                    s=np.array([x, y]),
+                    name=str(self.set_body_name()),
+                    m=np.random.randint(10e11, 10e17, dtype=np.uint64),
+                    s=np.array([self.mouse_event_xy[0], self.mouse_event_xy[1]]),
+                    v=np.array([x - self.mouse_event_xy[0], y - self.mouse_event_xy[1]])
                 ).create_path_array(self.bodies_path_size)
             )
         
@@ -160,10 +164,10 @@ world = World(
         #*[Body(name=f'{name}', m=10e12) for name in range(1, 20)],
         #Body(name='0', m=10e16, s=np.array([800, 400])),
         #Body(name='1', m=10e16, s=np.array([800, 400])),
-        Body(name='2', m=10e14, s=np.array([600, 400]), v=np.array([0, -80])),
-        Body(name='3', m=10e14, s=np.array([1000, 400]), v=np.array([0, 80])),
+        Body(name='2', m=60e16, s=np.array([600, 400]), v=np.array([0, -300])),
+        Body(name='3', m=60e16, s=np.array([1000, 400]), v=np.array([0, 300])),
     ],
     bodies_path_size=400,
-    frame_time=10e-3,
+    frame_time=20e-4,
 ).start()
 
