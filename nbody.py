@@ -39,34 +39,17 @@ class Body:
     @staticmethod
     @numba.njit
     def update_position_jit(a, v, s, body_s, body_m, t):
-        dx = body_s[0] - s[0]
-        dy = body_s[1] - s[1]
-        distance = np.sqrt(dx**2 + dy**2)
-        if distance < 30:
-            distance = 30
+        dxdy = (body_s - s)
+        squared_distance = np.sum(dxdy**2)
+        if squared_distance < 1000: # 30²
+            squared_distance = 1000
+        direction = np.sign(dxdy)
         
-        dxdy = np.array([dx, dy])
-        direction = dxdy/np.abs(dxdy) #np.sign([dx, dy])
-
-        a = ( body_m * G / distance ** 2 ) * direction
+        a = ( body_m * G / squared_distance ) * direction
         v = v + a * t
         s = s + v * t
         return s, v, a
-    
-    def update_history(self):
-        self.path_history = np.roll(self.path_history, 1, axis=0)
-        self.path_history[0] = self.s
-        return self
 
-    def update_position(self, body, t):
-        dx = body.s[0] - self.s[0]
-        dy = body.s[1] - self.s[1]
-        distance = np.sqrt(dx**2 + dy**2)
-        direction = np.sign([dx, dy])
-        self.a = ( body.m * G * 1 / distance ** 2 ) * direction
-        self.v = self.v + self.a * t # if distance > 20 else np.zeros(2)
-        self.s = self.s + self.v * t
-    
     def update(self, body, t):
         self.s, self.v, self.a = self.update_position_jit(
             self.a, self.v, self.s, 
@@ -76,10 +59,10 @@ class Body:
 
 @dataclass
 class World:
-    resolution: tuple
+    resolution: np.ndarray
     bodies: list[Body]
     bodies_path_size: int = 1
-    time_scale: int = 60
+    frame_time: int = 1
     
     def __post_init__(self):
         self.screen = 255 * np.ones((*self.resolution[::-1], 3), dtype=np.uint16)
@@ -93,25 +76,29 @@ class World:
         return max(names) + 1
 
     def mouse_callback(self, event, x, y, flags, params):
+        #with threading.Lock():
         if event == cv2.EVENT_LBUTTONUP:
-            #with threading.Lock():
             self.bodies.append(
                 Body(
                     name=str(self.get_bodie_name()),
-                    m=np.random.randint(1e14, 1e16, dtype=np.uint64),
+                    m=np.random.randint(10e11, 10e16, dtype=np.uint64),
                     s=np.array([x, y]),
                 ).create_path_array(self.bodies_path_size)
             )
         
         if event == cv2.EVENT_RBUTTONUP:
-            #with threading.Lock():
             self.bodies = list(filter(
                 lambda body: not (x-10 < body.s[0] < x+10 and y-10 < body.s[1] < y+10), 
                 self.bodies))
 
         if event == cv2.EVENT_MBUTTONUP:
-            #with threading.Lock():
             self.bodies = []
+
+        if event == cv2.EVENT_MOUSEWHEEL:
+            if flags > 0:
+                self.frame_time *= 100/90
+            else:
+                self.frame_time *= 90/100
 
     def show(self):
         cv2.namedWindow('image', cv2.WINDOW_NORMAL)
@@ -126,16 +113,22 @@ class World:
             alpha_colors = np.tile(np.arange(
                 0, 1, 1/self.bodies_path_size), (3, 1)
             ).T ** 1.5 * diff_to_255 + body.color
-        
-            for alpha, (x, y) in enumerate(body.path_history[1:]):
-                #body_color = body.color + color_alpha * alpha
-                cv2.circle(self.screen, (int(x), int(y)), 1, alpha_colors[alpha], -1)
-                # cv2.circle(self.screen, (int(x), int(y)), 1, body_color.tolist(), -1)
-            
-            x, y = int(body.s[0]), int(body.s[1])
-            cv2.circle(self.screen, (x, y), 12, body.color.tolist(), -1)
-            cv2.putText(self.screen, body.name, (x-10, y+6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
+            for alpha, (x, y) in enumerate(body.path_history[1:]):
+                cv2.circle(self.screen, (int(x), int(y)), 1, alpha_colors[alpha], -1)
+                # if not (x > self.resolution[0] or y > self.resolution[1]):
+                #     self.screen[int(y), int(x)] = alpha_colors[alpha]
+
+        for body in self.bodies:
+            x, y = int(body.s[0]), int(body.s[1])
+            cv2.circle(self.screen, (x, y), 6, body.color.tolist(), -1)
+
+        cv2.putText(
+            self.screen, f"body count: {len(self.bodies)}",
+            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 1)
+        cv2.putText(
+            self.screen, f"time scale: {self.frame_time:.6}",
+            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 1)
         self.show()
 
     def is_inside(self, body):
@@ -143,37 +136,34 @@ class World:
         y_condition = 0 <= body.path_history[-1][1] <= self.resolution[1]
         return x_condition and y_condition
 
-    def update(self):
-        t = self.time_scale
+    def update(self):        
         #with threading.Lock():
         for body in self.bodies:
             for another_bodie in self.bodies:
                 if another_bodie != body:
-                    body.update(another_bodie, t)
+                    body.update(another_bodie, self.frame_time)
         self.bodies = list(filter(
             lambda body: self.is_inside(body), 
             self.bodies))
-        #print(f'Body count: {len(self.bodies)}')
        
-
     def start(self):
         while True:
             self.update()
             self.render()
 
 world = World(
-    resolution=(1600, 800),
+    resolution=np.array([1600, 800]),
     bodies=[
         # Body(name='1', m=10e15, s=np.array([300, 300]), color=(0, 255, 255)),
         # Body(name='2', m=10e15, s=np.array([700, 300]), color=(255, 0, 100)),
         # Body(name='3', m=10e15, s=np.array([1200, 600]), color=(0, 255, 100)),
-        *[Body(name=f'{name}', m=10e14) for name in range(1, 20)],
-        Body(name='0', m=10e15, s=np.array([800, 400])),
-        # Body(name='1', m=30e15, s=np.array([800, 400]), color=(0, 255, 255)),
-        # Body(name='2', m=10e15, s=np.array([700, 400]), v=np.array([0, 450]), color=(255, 0, 255)),
-        # Body(name='3', m=10e15, s=np.array([900, 400]), v=np.array([0, -450]), color=(255, 0, 255)),
+        #*[Body(name=f'{name}', m=10e12) for name in range(1, 20)],
+        #Body(name='0', m=10e16, s=np.array([800, 400])),
+        #Body(name='1', m=10e16, s=np.array([800, 400])),
+        Body(name='2', m=10e14, s=np.array([600, 400]), v=np.array([0, -80])),
+        Body(name='3', m=10e14, s=np.array([1000, 400]), v=np.array([0, 80])),
     ],
-    bodies_path_size=700,
-    time_scale=1/60,
+    bodies_path_size=400,
+    frame_time=10e-3,
 ).start()
 
